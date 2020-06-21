@@ -247,33 +247,15 @@ class Runner(object):
         linkname = osp.join(out_dir, 'latest.pth')
         optimizer = self.optimizer if save_optimizer else None
         save_checkpoint(self.model, filename, optimizer=optimizer, meta=meta)
-        try:
-            mmcv.symlink(filename, linkname)
-        except:
-            pass
-        # not all file system supports the soft link, e.g. blobfuse. In
-        # this case, we just write the file name in that file
-        with open(linkname + '.tsv', 'w') as fp:
-            fp.write(filename)
+        mmcv.symlink(filename, linkname)
 
     def train(self, data_loader, **kwargs):
         self.model.train()
         self.mode = 'train'
         self.data_loader = data_loader
-        if 'max_iter' in kwargs and kwargs['max_iter'] is not None:
-            self._max_iters = kwargs['max_iter']
-        else:
-            self._max_iters = self._max_epochs * len(data_loader)
-        if 'max_iter' in kwargs:
-            del kwargs['max_iter']
+        self._max_iters = self._max_epochs * len(data_loader)
         self.call_hook('before_train_epoch')
         for i, data_batch in enumerate(data_loader):
-            if self._max_iters is not None and self._iter >= self._max_iters:
-                # note, we should check the iter here instead of the end, since
-                # we might set a larger epoch, and it will run more iterations
-                self.logger.info('exit due to maximum iter reached. {} >= {}'
-                        .format(self._iter, self._max_iters))
-                break
             self._inner_iter = i
             self.call_hook('before_train_iter')
             outputs = self.batch_processor(
