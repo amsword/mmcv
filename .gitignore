@@ -102,3 +102,11 @@ venv.bak/
 
 # mypy
 .mypy_cache/
+
+# editors and IDEs
+.idea/
+.vscode/
+
+# custom
+.DS_Store
+mmcv/video/optflow_warp/flow_warp_module.cpp

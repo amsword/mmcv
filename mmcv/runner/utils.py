@@ -1,41 +1,14 @@
-import functools
+# Copyright (c) Open-MMLab. All rights reserved.
 import sys
 import time
 from getpass import getuser
 from socket import gethostname
 
 import mmcv
-import torch
-import torch.distributed as dist
 
 
 def get_host_info():
-    return '{}@{}'.format(getuser(), gethostname())
-
-
-def get_dist_info():
-    if torch.__version__ < '1.0':
-        initialized = dist._initialized
-    else:
-        initialized = dist.is_initialized()
-    if initialized:
-        rank = dist.get_rank()
-        world_size = dist.get_world_size()
-    else:
-        rank = 0
-        world_size = 1
-    return rank, world_size
-
-
-def master_only(func):
-
-    @functools.wraps(func)
-    def wrapper(*args, **kwargs):
-        rank, _ = get_dist_info()
-        if rank == 0:
-            return func(*args, **kwargs)
-
-    return wrapper
+    return f'{getuser()}@{gethostname()}'
 
 
 def get_time_str():
@@ -69,8 +42,8 @@ def obj_from_dict(info, parent=None, default_args=None):
         else:
             obj_type = sys.modules[obj_type]
     elif not isinstance(obj_type, type):
-        raise TypeError('type must be a str or valid type, but got {}'.format(
-            type(obj_type)))
+        raise TypeError('type must be a str or valid type, but '
+                        f'got {type(obj_type)}')
     if default_args is not None:
         for name, value in default_args.items():
             args.setdefault(name, value)

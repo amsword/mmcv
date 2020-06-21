@@ -1,50 +1,85 @@
+# Copyright (c) Open-MMLab. All rights reserved.
 import torch
-import torch.distributed as dist
-import torch.nn as nn
-from torch._utils import (_flatten_dense_tensors, _unflatten_dense_tensors,
-                          _take_tensors)
+from torch.nn.parallel.distributed import (DistributedDataParallel,
+                                           _find_tensors)
 
+from mmcv.utils import TORCH_VERSION
 from .scatter_gather import scatter_kwargs
 
 
-class MMDistributedDataParallel(nn.Module):
+class MMDistributedDataParallel(DistributedDataParallel):
+    """The DDP module that supports DataContainer.
 
-    def __init__(self, module, dim=0, broadcast_buffers=True,
-                 bucket_cap_mb=25):
-        super(MMDistributedDataParallel, self).__init__()
-        self.module = module
-        self.dim = dim
-        self.broadcast_buffers = broadcast_buffers
+    MMDDP has two main differences with PyTorch DDP:
 
-        self.broadcast_bucket_size = bucket_cap_mb * 1024 * 1024
-        self._sync_params()
-
-    def _dist_broadcast_coalesced(self, tensors, buffer_size):
-        for tensors in _take_tensors(tensors, buffer_size):
-            flat_tensors = _flatten_dense_tensors(tensors)
-            dist.broadcast(flat_tensors, 0)
-            for tensor, synced in zip(
-                    tensors, _unflatten_dense_tensors(flat_tensors, tensors)):
-                tensor.copy_(synced)
-
-    def _sync_params(self):
-        module_states = list(self.module.state_dict().values())
-        if len(module_states) > 0:
-            self._dist_broadcast_coalesced(module_states,
-                                           self.broadcast_bucket_size)
-        if self.broadcast_buffers:
-            if torch.__version__ < '1.0':
-                buffers = [b.data for b in self.module._all_buffers()]
-            else:
-                buffers = [b.data for b in self.module.buffers()]
-            if len(buffers) > 0:
-                self._dist_broadcast_coalesced(buffers,
-                                               self.broadcast_bucket_size)
+    - It supports a custom type :class:`DataContainer` which allows more
+      flexible control of input data.
+    - It implement two APIs ``train_step()`` and ``val_step()``.
+    """
 
     def scatter(self, inputs, kwargs, device_ids):
         return scatter_kwargs(inputs, kwargs, device_ids, dim=self.dim)
 
-    def forward(self, *inputs, **kwargs):
-        inputs, kwargs = self.scatter(inputs, kwargs,
-                                      [torch.cuda.current_device()])
-        return self.module(*inputs[0], **kwargs[0])
+    def train_step(self, *inputs, **kwargs):
+        """train_step() API for module wrapped by DistributedDataParallel.
+
+        This method is basically the same as
+        ``DistributedDataParallel.forward()``, while replacing
+        ``self.module.forward()`` with ``self.module.train_step()``.
+        It is compatible with PyTorch 1.1 - 1.5.
+        """
+        if getattr(self, 'require_forward_param_sync', True):
+            self._sync_params()
+        if self.device_ids:
+            inputs, kwargs = self.scatter(inputs, kwargs, self.device_ids)
+            if len(self.device_ids) == 1:
+                output = self.module.train_step(*inputs[0], **kwargs[0])
+            else:
+                outputs = self.parallel_apply(
+                    self._module_copies[:len(inputs)], inputs, kwargs)
+                output = self.gather(outputs, self.output_device)
+        else:
+            output = self.module.train_step(*inputs, **kwargs)
+
+        if torch.is_grad_enabled() and getattr(
+                self, 'require_backward_grad_sync', True):
+            if self.find_unused_parameters:
+                self.reducer.prepare_for_backward(list(_find_tensors(output)))
+            else:
+                self.reducer.prepare_for_backward([])
+        else:
+            if TORCH_VERSION > '1.2':
+                self.require_forward_param_sync = False
+        return output
+
+    def val_step(self, *inputs, **kwargs):
+        """val_step() API for module wrapped by DistributedDataParallel.
+
+        This method is basically the same as
+        ``DistributedDataParallel.forward()``, while replacing
+        ``self.module.forward()`` with ``self.module.val_step()``.
+        It is compatible with PyTorch 1.1 - 1.5.
+        """
+        if getattr(self, 'require_forward_param_sync', True):
+            self._sync_params()
+        if self.device_ids:
+            inputs, kwargs = self.scatter(inputs, kwargs, self.device_ids)
+            if len(self.device_ids) == 1:
+                output = self.module.val_step(*inputs[0], **kwargs[0])
+            else:
+                outputs = self.parallel_apply(
+                    self._module_copies[:len(inputs)], inputs, kwargs)
+                output = self.gather(outputs, self.output_device)
+        else:
+            output = self.module.val_step(*inputs, **kwargs)
+
+        if torch.is_grad_enabled() and getattr(
+                self, 'require_backward_grad_sync', True):
+            if self.find_unused_parameters:
+                self.reducer.prepare_for_backward(list(_find_tensors(output)))
+            else:
+                self.reducer.prepare_for_backward([])
+        else:
+            if TORCH_VERSION > '1.2':
+                self.require_forward_param_sync = False
+        return output

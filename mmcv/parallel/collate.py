@@ -1,4 +1,5 @@
-import collections
+# Copyright (c) Open-MMLab. All rights reserved.
+from collections.abc import Mapping, Sequence
 
 import torch
 import torch.nn.functional as F
@@ -19,8 +20,8 @@ def collate(batch, samples_per_gpu=1):
     3. cpu_only = False, stack = False, e.g., gt bboxes
     """
 
-    if not isinstance(batch, collections.Sequence):
-        raise TypeError("{} is not supported.".format(batch.dtype))
+    if not isinstance(batch, Sequence):
+        raise TypeError(f'{batch.dtype} is not supported.')
 
     if isinstance(batch[0], DataContainer):
         assert len(batch) % samples_per_gpu == 0
@@ -34,30 +35,48 @@ def collate(batch, samples_per_gpu=1):
         elif batch[0].stack:
             for i in range(0, len(batch), samples_per_gpu):
                 assert isinstance(batch[i].data, torch.Tensor)
-                # TODO: handle tensors other than 3d
-                assert batch[i].dim() == 3
-                c, h, w = batch[i].size()
-                for sample in batch[i:i + samples_per_gpu]:
-                    assert c == sample.size(0)
-                    h = max(h, sample.size(1))
-                    w = max(w, sample.size(2))
-                padded_samples = [
-                    F.pad(
-                        sample.data,
-                        (0, w - sample.size(2), 0, h - sample.size(1)),
-                        value=sample.padding_value)
-                    for sample in batch[i:i + samples_per_gpu]
-                ]
-                stacked.append(default_collate(padded_samples))
+
+                if batch[i].pad_dims is not None:
+                    ndim = batch[i].dim()
+                    assert ndim > batch[i].pad_dims
+                    max_shape = [0 for _ in range(batch[i].pad_dims)]
+                    for dim in range(1, batch[i].pad_dims + 1):
+                        max_shape[dim - 1] = batch[i].size(-dim)
+                    for sample in batch[i:i + samples_per_gpu]:
+                        for dim in range(0, ndim - batch[i].pad_dims):
+                            assert batch[i].size(dim) == sample.size(dim)
+                        for dim in range(1, batch[i].pad_dims + 1):
+                            max_shape[dim - 1] = max(max_shape[dim - 1],
+                                                     sample.size(-dim))
+                    padded_samples = []
+                    for sample in batch[i:i + samples_per_gpu]:
+                        pad = [0 for _ in range(batch[i].pad_dims * 2)]
+                        for dim in range(1, batch[i].pad_dims + 1):
+                            pad[2 * dim -
+                                1] = max_shape[dim - 1] - sample.size(-dim)
+                        padded_samples.append(
+                            F.pad(
+                                sample.data, pad, value=sample.padding_value))
+                    stacked.append(default_collate(padded_samples))
+                elif batch[i].pad_dims is None:
+                    stacked.append(
+                        default_collate([
+                            sample.data
+                            for sample in batch[i:i + samples_per_gpu]
+                        ]))
+                else:
+                    raise ValueError(
+                        'pad_dims should be either None or integers (1-3)')
+
         else:
             for i in range(0, len(batch), samples_per_gpu):
                 stacked.append(
                     [sample.data for sample in batch[i:i + samples_per_gpu]])
         return DataContainer(stacked, batch[0].stack, batch[0].padding_value)
-    elif isinstance(batch[0], collections.Sequence):
+    elif isinstance(batch[0], Sequence):
         transposed = zip(*batch)
         return [collate(samples, samples_per_gpu) for samples in transposed]
-    elif isinstance(batch[0], collections.Mapping):
+    elif isinstance(batch[0], Mapping):
         return {
             key: collate([d[key] for d in batch], samples_per_gpu)
             for key in batch[0]

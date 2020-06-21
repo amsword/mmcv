@@ -1,27 +1,17 @@
+# Copyright (c) Open-MMLab. All rights reserved.
 import os.path as osp
 from collections import OrderedDict
 
 import cv2
+from cv2 import (CAP_PROP_FOURCC, CAP_PROP_FPS, CAP_PROP_FRAME_COUNT,
+                 CAP_PROP_FRAME_HEIGHT, CAP_PROP_FRAME_WIDTH,
+                 CAP_PROP_POS_FRAMES, VideoWriter_fourcc)
 
-from mmcv.utils import (scandir, check_file_exist, mkdir_or_exist,
+from mmcv.utils import (check_file_exist, mkdir_or_exist, scandir,
                         track_progress)
-from mmcv.opencv_info import USE_OPENCV2
-
-if not USE_OPENCV2:
-    from cv2 import (CAP_PROP_FRAME_WIDTH, CAP_PROP_FRAME_HEIGHT, CAP_PROP_FPS,
-                     CAP_PROP_FRAME_COUNT, CAP_PROP_FOURCC,
-                     CAP_PROP_POS_FRAMES, VideoWriter_fourcc)
-else:
-    from cv2.cv import CV_CAP_PROP_FRAME_WIDTH as CAP_PROP_FRAME_WIDTH
-    from cv2.cv import CV_CAP_PROP_FRAME_HEIGHT as CAP_PROP_FRAME_HEIGHT
-    from cv2.cv import CV_CAP_PROP_FPS as CAP_PROP_FPS
-    from cv2.cv import CV_CAP_PROP_FRAME_COUNT as CAP_PROP_FRAME_COUNT
-    from cv2.cv import CV_CAP_PROP_FOURCC as CAP_PROP_FOURCC
-    from cv2.cv import CV_CAP_PROP_POS_FRAMES as CAP_PROP_POS_FRAMES
-    from cv2.cv import CV_FOURCC as VideoWriter_fourcc
 
 
-class Cache(object):
+class Cache:
 
     def __init__(self, capacity):
         self._cache = OrderedDict()
@@ -49,7 +39,7 @@ class Cache(object):
         return val
 
 
-class VideoReader(object):
+class VideoReader:
     """Video class with similar usage to a list object.
 
     This video warpper class provides convenient apis to access frames.
@@ -176,8 +166,7 @@ class VideoReader(object):
         """
         if frame_id < 0 or frame_id >= self._frame_cnt:
             raise IndexError(
-                '"frame_id" must be between 0 and {}'.format(self._frame_cnt -
-                                                             1))
+                f'"frame_id" must be between 0 and {self._frame_cnt - 1}')
         if frame_id == self._position:
             return self.read()
         if self._cache:

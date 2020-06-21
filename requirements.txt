@@ -1,6 +1,4 @@
 addict
-numpy>=1.11.1
+numpy
 pyyaml
-six
-requests
-opencv-python
+yapf

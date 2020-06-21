@@ -1,8 +1,11 @@
+# Copyright (c) Open-MMLab. All rights reserved.
+import numpy as np
 import torch.nn as nn
 
 
 def constant_init(module, val, bias=0):
-    nn.init.constant_(module.weight, val)
+    if hasattr(module, 'weight') and module.weight is not None:
+        nn.init.constant_(module.weight, val)
     if hasattr(module, 'bias') and module.bias is not None:
         nn.init.constant_(module.bias, bias)
 
@@ -55,3 +58,9 @@ def caffe2_xavier_init(module, bias=0):
         mode='fan_in',
         nonlinearity='leaky_relu',
         distribution='uniform')
+
+
+def bias_init_with_prob(prior_prob):
+    """ initialize conv/fc bias value according to giving probablity"""
+    bias_init = float(-np.log((1 - prior_prob) / prior_prob))
+    return bias_init
