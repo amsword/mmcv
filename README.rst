@@ -24,12 +24,12 @@ and `MMAction <https://github.com/open-mmlab/mmaction>`_.
 It provides the following functionalities.
 
 - Universal IO APIs
-- Image processing
-- Video processing
+- Image/Video processing
 - Image and annotation visualization
 - Useful utilities (progress bar, timer, ...)
 - PyTorch runner with hooking mechanism
 - Various CNN architectures
+- High-quality implementation of common CUDA ops
 
 See the `documentation <http://mmcv.readthedocs.io/en/latest>`_ for more features and usage.
 
@@ -53,6 +53,12 @@ or install from source
     git clone https://github.com/open-mmlab/mmcv.git
     cd mmcv
     pip install -e .
+
+If you are on macOS, replace the last command with
+
+.. code::
+
+   CC=lang CXX=clang++ CFLAGS='-stdlib=libc++' pip install -e .
 
 Note: If you would like to use :code:`opencv-python-headless` instead of :code:`opencv-python`,
 e.g., in a minimum container environment or servers without GUI,
