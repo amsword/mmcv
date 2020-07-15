@@ -6,6 +6,7 @@ from torch.autograd.function import once_differentiable
 from torch.nn.modules.module import Module
 from torch.nn.parameter import Parameter
 
+from mmcv.cnn import NORM_LAYERS
 from ..utils import ext_loader
 
 ext_module = ext_loader.load_ext('_ext', [
@@ -109,6 +110,7 @@ class SyncBatchNormFunction(Function):
             None, None, None, None
 
 
+@NORM_LAYERS.register_module(name='MMSyncBN')
 class SyncBatchNorm(Module):
 
     def __init__(self,
@@ -117,14 +119,14 @@ class SyncBatchNorm(Module):
                  momentum=0.1,
                  affine=True,
                  track_running_stats=True,
-                 group=dist.group.WORLD):
+                 group=None):
         super(SyncBatchNorm, self).__init__()
         self.num_features = num_features
         self.eps = eps
         self.momentum = momentum
         self.affine = affine
         self.track_running_stats = track_running_stats
-        self.group = group
+        self.group = dist.group.WORLD if group is None else group
         self.group_size = dist.get_world_size(group)
         if self.affine:
             self.weight = Parameter(torch.Tensor(num_features))
